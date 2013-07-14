@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/gui
 
 (require (planet williams/science/random-distributions))
 (require (planet williams/science/math))
