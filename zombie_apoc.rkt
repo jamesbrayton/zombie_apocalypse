@@ -85,7 +85,23 @@
   (?w <- (walk (?i (>= ?i 1000)) ?j ?ID))
   ==>
   (printf "~a FINISHED atttttttttttttttttt: ~a ~a\n" ?ID ?i ?j))
-  
+
+
+;; Zombie Apoc. Graphics
+(define cell-glyph-size 12)
+
+(define frame (new frame% 
+                   [label "Example"]
+                   [width 300]
+                   [height 300]))
+
+(new canvas% [parent frame]
+             [paint-callback 
+              (lambda (canvas dc)
+                (send dc clear)
+                (send dc set-brush "blue" 'solid)
+                (send dc draw-ellipse 1 2 cell-glyph-size cell-glyph-size))])
+                
 (define (race-to-finish)
   (with-new-inference-environment
    (current-inference-strategy 'breadth)
@@ -98,5 +114,6 @@
 
 ;; run it
 (random-source-randomize! (current-random-source))
+(send frame show #t)
 (race-to-finish)
   
