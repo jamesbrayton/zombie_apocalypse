@@ -1,10 +1,5 @@
 #lang racket
 
-;; 7/14/13
-; - they now kill each other and are controlled by time rules, we've just gotta be able to
-;   draw this stuff now within the predicate inference engine after the ==>'s, or have it
-;   communicate with the canvas like in the social-model.rkt example.
-
 (require (planet williams/science/random-distributions))
 (require (planet williams/science/math))
 (require (planet williams/simulation/simulation)
@@ -41,7 +36,7 @@
 
 ;; within the bounds? 
 (define (valid-move? val)
-  (and (>= val 0) (< val edge-length)))              ; uses edge-length GLOBAL
+  (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
 ;;____________________________________________________________________________
 
@@ -63,12 +58,12 @@
 ; walk
 
 ;; staggering around to a goal not using the actor struct,
-;;  but simple state literal lists: '(start i j) 
-(define-ruleset walk-rules)  
+;; but simple state literal lists: '(start i j)
+(define-ruleset walk-rules)
 
 ;; GOAL state time limit
 (define-rule (time-limit walk-rules)
-  (?timer <- (time (?t (>= ?t 100))))                          ;;set time limit here!!!!!!!!!!!
+  (?timer <- (time (?t (>= ?t 100))))                   ;;set time limit here!
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -93,16 +88,16 @@
     (assert `(walk ,newI ,newJ ,?ID ,(- ?t 1)))))
 
 ;; if they're in the same spot, get rid of the first one, must be SAME time
-(define-rule (battle-time walk-rules)                                 
+(define-rule (battle-time walk-rules)
   (?die <- (walk ?i-d ?j-d ?ID-d ?t-d))
   (?kill <- (walk ?i-k ?j-k ?ID-k ?t-k))
   (?pc <- (player-count ?c))
   ==>
-  (if (and (and (and (and                             ; annoying to have some logic here, but works!
-                      (= ?t-d ?t-k)              ;same time-slice?
+  (if (and (and (and (and                             ;; annoying to have some logic here, but works!
+                      (= ?t-d ?t-k)                   ;; same time-slice?
                       (= ?i-d ?i-k)
                       (= ?j-d ?j-k)
-                      (not (= ?ID-d ?ID-k))))))  ;not killing yourself?
+                      (not (= ?ID-d ?ID-k))))))       ;; not killing yourself?
       (begin0 (printf "TIME: ~a:\t~a killed ~a!!!!!!!!!!!!!!!!!!!\n" ?t-d ?ID-k ?ID-d)
               (retract ?die)
               (retract ?pc)
@@ -110,7 +105,7 @@
       (printf "TIME ~a:\t~a didn't kill ~a\n" ?t-d ?ID-k ?ID-d)))
 
 ;; walking around within edge-length x edge-length
-(define-rule (just-walking walk-rules)                                   ;; seems to be stuck here
+(define-rule (just-walking walk-rules)
   ;; not yet to finish line at: [40, ?]
   (?timer <- (time ?t))
   (?w <- (walk ?i ?j ?ID (?tw (< ?tw ?t))))
@@ -132,11 +127,11 @@
   (retract ?timer)
   (assert `(time ,(+ 1 ?t)))
   (printf "TIME was: ~a\n\n" ?t))
-  
+
 ;______________________________________________________________
 
 ;_____________________________RUN IT___________________________________________________
-  
+
 (define (race-to-finish)
   (with-new-inference-environment
    ; needed for top to bottom ordering of the rules
@@ -147,11 +142,10 @@
    (assert '(start 2))
    (assert '(start 3))
    (assert '(time 1))                        ;; timer keeps track of the turns
-   (assert '(player-count 3))               ;; for an end state to see winner
+   (assert '(player-count 3))                ;; for an end state to see winner
    (start-inference)))
 
 ; randomize source
 (random-source-randomize! (current-random-source))
 ;run it
 (race-to-finish)
-  
