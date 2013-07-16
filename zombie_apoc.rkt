@@ -147,11 +147,5 @@
 
 ; randomize source
 (random-source-randomize! (current-random-source))
-<<<<<<< HEAD
-(send frame show #t)
-(race-to-finish)
-  
-=======
 ;run it
 (race-to-finish)
->>>>>>> master
