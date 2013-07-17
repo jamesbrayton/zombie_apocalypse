@@ -1,13 +1,15 @@
 #lang racket
 
-(require (planet williams/science/random-distributions))
-(require (planet williams/science/math))
+;;; Nic Young | Andrew Hoyle | James Brayton
+
 (require (planet williams/simulation/simulation)
-         (planet williams/inference/inference))
+         (planet williams/inference/inference)
+         (planet williams/science/random-distributions)
+         (planet williams/science/math))
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 10)
+(define edge-length 5)
 
 ;;____________________________________________________________________
 
@@ -42,12 +44,9 @@
 
 ;;______________________________LOGIC_________________________________
 
-; can't get this to be part of the rules. could use let with binding??
-(define finish-line 10)
-
 ;; info floating around:
-;; (state-label i j ID time strength speed)
-;; - state label : 'zombie 'person
+;; ('actor label i j ID time strength speed)                        ;; speed not yet implemented
+;; - label : 'zombie | 'person
 ;; (player-count #)
 ;; (time #)
 
@@ -55,74 +54,112 @@
 ; goals
 ; start
 ; battle
-; battleCheck
 ; walk
 ; time inc
 
 ;; staggering around to a goal not using the actor struct,
 ;; but simple state literal lists: '(start i j)
-(define-ruleset walk-rules)
+(define-ruleset zombie-game-rules)
+
+;; ---------GOALS
 
 ;; GOAL state time limit
-(define-rule (time-limit walk-rules)
-  (?timer <- (time (?t (>= ?t 100))))                   ;;set time limit here!
+(define-rule (time-limit zombie-game-rules)
+  (?timer <- (time (?t (>= ?t 100))))                   ;; set time limit here!
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
 
 ;; GOAL state one remains
-(define-rule (one-left walk-rules)
+(define-rule (one-left zombie-game-rules)
   (?pc <- (player-count (?c (= 1 ?c))))
-  (?w <- (walk ?i ?j ?ID ?t))
+  (?actor <- (actor ?label ?i ?j ?ID ?t ?str))
   ==>
   (printf "~a WINS THE GAME\n" ?ID)
   (succeed))
 
+;; ---------START
+
 ;; START state for predicate states-randomly assigns a valid starting point
 ;;  and a normal distribution of the player's strengths and whether they're
 ;;  a 'zombie or 'person
-(define-rule (set-values walk-rules)
-  (?st <- (start ?ID))
+(define-rule (set-values zombie-game-rules)
+  (?start <- (start ?ID))
   (?timer <- (time ?t))
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)      ;; first time -1
-    (retract ?st)
-    (assert `(walk ,newI ,newJ ,?ID ,(- ?t 1)))))
+    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              ;; first time -1
+    (retract ?start)
+    ;; randomly create a zombie or person
+    (if (< 0.5 (random))                                                           ;; change z / p ratio here
+        ;; normal-distribution of strength
+        (begin
+          (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
+                          ,(random-gaussian 100 10)))                              ;; change dist here
+          (printf "zombie made\n"))
+        (begin
+          (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
+                          ,(random-gaussian 100 10)))                              ;; change dist here
+          (printf "person made\n")))))
 
-;; if they're in the same spot, get rid of the first one, 
-;;  must be SAME time and different IDs
-(define-rule (battle-time walk-rules)
-  (?die <- (walk ?i ?j ?ID-d ?t-d))
-  (?kill <- (walk ?i ?j (?ID-k (not (= ?ID-k ?ID-d))) (?t-k (= ?t-d ?t-k))))
+;; ---------BATTLE    
+    
+;; zombie is stronger, and in same location as person
+(define-rule (zombify zombie-game-rules)
+  (?die <- (actor person ?i ?j ?ID-d ?t ?str-d))
+  (?kill <- (actor zombie ?i ?j 
+                    (?ID-k (not (= ?ID-k ?ID-d)))        ;; probably not needed
+                    ?t
+                    (?str-k (> ?str-k ?str-d))))
   (?pc <- (player-count ?c))
   ==>
-  (printf "TIME: ~a:\t~a killed ~a!!!!!!!!!!!!!!!!!!!\n" ?t-d ?ID-k ?ID-d)
+  (printf "TIME: ~a:\tzombie ~a killed person ~a!\n" ?t ?ID-k ?ID-d)
+  ;; killed off person
   (retract ?die)
+  ;; player count lowered
   (retract ?pc)
   (assert `(player-count ,(- ?c 1))))
 
-;; walking around within edge-length x edge-length
-(define-rule (just-walking walk-rules)
-  ;; not yet to finish line at: [40, ?]
-  (?timer <- (time ?t))
-  (?w <- (walk ?i ?j ?ID (?tw (< ?tw ?t))))
+;; person is stronger, and in same location as zombie
+(define-rule (decapitate zombie-game-rules)
+  (?die <- (actor zombie ?i ?j ?ID-d ?t ?str-d))
+  (?kill <- (actor person ?i ?j 
+                    (?ID-k (not (= ?ID-k ?ID-d)))        ;; probably not needed
+                    ?t
+                    (?str-k (> ?str-k ?str-d))))
+  (?pc <- (player-count ?c))
   ==>
-  ;; doesn't leave loop until a valid move is made
-  (let loop ()                                                 ;; goes until a valid move is made
+  (printf "TIME: ~a:\tperson ~a killed zombie ~a!\n" ?t ?ID-k ?ID-d)
+  ;; killed off zombie
+  (retract ?die)
+  ;; player count lowered
+  (retract ?pc)
+  (assert `(player-count ,(- ?c 1))))
+
+;; ---------WALKING
+
+;; walking around within edge-length X edge-length
+(define-rule (random-walking zombie-game-rules)
+  (?timer <- (time ?t))
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))          ;; ?label can be 'zombie or 'person
+  ==>
+  ;; doesn't leave loop until a valid move is made inside the board
+  (let loop ()                                                          ;; goes until a valid move is made
     (let ([newI (+ ?i (rand-move))]
           [newJ (+ ?j (rand-move))])
-       (if (and (valid-move? newI) (valid-move? newJ))         ;; put a wall check here too
+       (if (and (valid-move? newI) (valid-move? newJ))                  ;; put a wall check here too
          (begin 
-           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
-           (retract ?w)
-           (assert `(walk ,newI ,newJ ,?ID ,(+ 1 ?tw))))       ;; inc actor time to show it's moved
+           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)  ;; should be ?t-a
+           (retract ?actor)
+           (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       ;; inc actor time to show it's moved
          (loop)))))
+
+;; ---------TIME INCREMENT
 
 ;; increment timer only when there's nothing left to do...
 ;;  meaning all players have moved and interacted
-(define-rule (time-forward walk-rules)
+(define-rule (time-inc zombie-game-rules)
   (?timer <- (time ?t))
   ==>
   (retract ?timer)
@@ -131,13 +168,13 @@
 
 ;______________________________________________________________
 
-;_____________________________RUN IT___________________________________________________
+;_____________________________RUN IT___________________________
 
-(define (race-to-finish)
+(define (run-zombie-sim)
   (with-new-inference-environment
    ; needed for top to bottom ordering of the rules
    (current-inference-strategy 'order)
-   (activate walk-rules)
+   (activate zombie-game-rules)
    ;; start state.... where we could put our randomly made zombies
    (assert '(start 1))
    (assert '(start 2))
@@ -149,4 +186,4 @@
 ; randomize source
 (random-source-randomize! (current-random-source))
 ;run it
-(race-to-finish)
+(run-zombie-sim)
