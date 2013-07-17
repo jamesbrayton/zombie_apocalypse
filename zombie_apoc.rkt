@@ -1,11 +1,12 @@
-#lang racket
+#lang racket/gui
 
 ;;; Nic Young | Andrew Hoyle | James Brayton
 
 (require (planet williams/simulation/simulation)
          (planet williams/inference/inference)
          (planet williams/science/random-distributions)
-         (planet williams/science/math))
+         (planet williams/science/math)
+         (planet williams/animated-canvas/animated-canvas))
 
 ;; __________________________GLOBALS__________________________________
 
@@ -153,7 +154,11 @@
            (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)  ;; should be ?t-a
            (retract ?actor)
            (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       ;; inc actor time to show it's moved
-         (loop)))))
+         (loop)) ;; inc actor time to show it's moved
+         (let* ((dc (send canvas get-dc))
+            (width (send canvas get-width))
+            (height (send canvas get-height))) 
+      (send dc draw-ellipse newI newJ 10 10)))))
 
 ;; ---------TIME INCREMENT
 
@@ -164,11 +169,26 @@
   ==>
   (retract ?timer)
   (assert `(time ,(+ 1 ?t)))
-  (printf "TIME was: ~a\n\n" ?t))
+  (printf "TIME was: ~a\n\n" ?t)
+  (send canvas swap-bitmaps))
 
 ;______________________________________________________________
 
-;_____________________________RUN IT___________________________
+;; All the GFX
+;;____________________________________________________________________________________
+(define frame
+  (instantiate frame% ("Zombie Apocalypse")))
+
+(define canvas
+  (instantiate animated-canvas%
+    (frame)
+    (style `(border))
+    (min-width 100)
+    (min-height 100)))
+
+;;____________________________________________________________________________________
+
+;_____________________________RUN IT___________________________________________________
 
 (define (run-zombie-sim)
   (with-new-inference-environment
@@ -186,4 +206,5 @@
 ; randomize source
 (random-source-randomize! (current-random-source))
 ;run it
+(send frame show #t)
 (run-zombie-sim)
