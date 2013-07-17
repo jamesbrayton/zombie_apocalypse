@@ -11,7 +11,7 @@
 
 ;;____________________________________________________________________
 
-;;_______________________NOT USED YET_______________________________________
+;;_______________________NOT USED YET_________________________________
 
 ;; struct to hold people/zombies
 (define-struct actor (i j type strength speed IQ)) 
@@ -21,10 +21,10 @@
   (sqrt (+ (expt (- (actor-i a1) (actor-i a2)) 2)
                 (expt (- (actor-j a1) (actor-j a2)) 2))))
 
-;;___________________________________________________________________________
+;;_____________________________________________________________________
 
 
-;;____________________________predicate functions_____________________________
+;;____________________________predicate functions______________________
 
 ;; walk that just is [-1,1], apply to i and j
 (define (rand-move)
@@ -38,24 +38,26 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
-;;____________________________________________________________________________
+;;____________________________________________________________________
 
-;;______________________________LOGIC______________________________
+;;______________________________LOGIC_________________________________
 
 ; can't get this to be part of the rules. could use let with binding??
 (define finish-line 10)
 
 ;; info floating around:
-;; (state-label i j ID time)
+;; (state-label i j ID time strength speed)
+;; - state label : 'zombie 'person
 ;; (player-count #)
 ;; (time #)
 
 ;; gotta use 'order search procedure I think so the priorities can be set
-; goal
+; goals
 ; start
 ; battle
 ; battleCheck
 ; walk
+; time inc
 
 ;; staggering around to a goal not using the actor struct,
 ;; but simple state literal lists: '(start i j)
@@ -77,32 +79,29 @@
   (succeed))
 
 ;; START state for predicate states-randomly assigns a valid starting point
-(define-rule (set-locations-randomly walk-rules)
+;;  and a normal distribution of the player's strengths and whether they're
+;;  a 'zombie or 'person
+(define-rule (set-values walk-rules)
   (?st <- (start ?ID))
   (?timer <- (time ?t))
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)      ;first time -1
+    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)      ;; first time -1
     (retract ?st)
     (assert `(walk ,newI ,newJ ,?ID ,(- ?t 1)))))
 
-;; if they're in the same spot, get rid of the first one, must be SAME time
+;; if they're in the same spot, get rid of the first one, 
+;;  must be SAME time and different IDs
 (define-rule (battle-time walk-rules)
-  (?die <- (walk ?i-d ?j-d ?ID-d ?t-d))
-  (?kill <- (walk ?i-k ?j-k ?ID-k ?t-k))
+  (?die <- (walk ?i ?j ?ID-d ?t-d))
+  (?kill <- (walk ?i ?j (?ID-k (not (= ?ID-k ?ID-d))) (?t-k (= ?t-d ?t-k))))
   (?pc <- (player-count ?c))
   ==>
-  (if (and (and (and (and                             ;; annoying to have some logic here, but works!
-                      (= ?t-d ?t-k)                   ;; same time-slice?
-                      (= ?i-d ?i-k)
-                      (= ?j-d ?j-k)
-                      (not (= ?ID-d ?ID-k))))))       ;; not killing yourself?
-      (begin0 (printf "TIME: ~a:\t~a killed ~a!!!!!!!!!!!!!!!!!!!\n" ?t-d ?ID-k ?ID-d)
-              (retract ?die)
-              (retract ?pc)
-              (assert `(player-count ,(- ?c 1))))
-      (printf "TIME ~a:\t~a didn't kill ~a\n" ?t-d ?ID-k ?ID-d)))
+  (printf "TIME: ~a:\t~a killed ~a!!!!!!!!!!!!!!!!!!!\n" ?t-d ?ID-k ?ID-d)
+  (retract ?die)
+  (retract ?pc)
+  (assert `(player-count ,(- ?c 1))))
 
 ;; walking around within edge-length x edge-length
 (define-rule (just-walking walk-rules)
@@ -110,17 +109,19 @@
   (?timer <- (time ?t))
   (?w <- (walk ?i ?j ?ID (?tw (< ?tw ?t))))
   ==>
+  ;; doesn't leave loop until a valid move is made
   (let loop ()                                                 ;; goes until a valid move is made
     (let ([newI (+ ?i (rand-move))]
           [newJ (+ ?j (rand-move))])
-       (if (and (valid-move? newI) (valid-move? newJ))
+       (if (and (valid-move? newI) (valid-move? newJ))         ;; put a wall check here too
          (begin 
            (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
            (retract ?w)
            (assert `(walk ,newI ,newJ ,?ID ,(+ 1 ?tw))))       ;; inc actor time to show it's moved
          (loop)))))
 
-; increment timer only when there's nothing left to do... meaning all players have moved
+;; increment timer only when there's nothing left to do...
+;;  meaning all players have moved and interacted
 (define-rule (time-forward walk-rules)
   (?timer <- (time ?t))
   ==>
