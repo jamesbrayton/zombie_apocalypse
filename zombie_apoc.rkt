@@ -96,30 +96,30 @@
         ;; normal-distribution of strength
         (begin
           (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here
           (printf "zombie made\n"))
         (begin
           (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here
           (printf "person made\n")))))
 
 ;; ---------BATTLE    
     
-;; zombie is stronger, and in same location as person
+;; zombie is stronger, and in same location as person,
+;;  person is now turned to zombie and has to wait
 (define-rule (zombify zombie-game-rules)
-  (?die <- (actor person ?i ?j ?ID-d ?t ?str-d))
+  (?new-zombie <- (actor person ?i ?j ?ID-nz ?t ?str-nz))
   (?kill <- (actor zombie ?i ?j 
-                    (?ID-k (not (= ?ID-k ?ID-d)))        ;; probably not needed
+                    (?ID-k (not (= ?ID-k ?ID-nz)))        ;; probably not needed
                     ?t
-                    (?str-k (> ?str-k ?str-d))))
+                    (?str-k (> ?str-k ?str-nz))))
   (?pc <- (player-count ?c))
   ==>
-  (printf "TIME: ~a:\tzombie ~a killed person ~a!\n" ?t ?ID-k ?ID-d)
-  ;; killed off person
-  (retract ?die)
+  (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-k ?ID-nz)
+  ;; zombify person, add to their time to stall their motion                      ;; wait time is here
+  (replace ?new-zombie `(actor zombie ,?i ,?j ,?ID-nz ,(+ ?t 3) ,?str-nz))        ;; replace used
   ;; player count lowered
-  (retract ?pc)
-  (assert `(player-count ,(- ?c 1))))
+  (retract ?pc))
 
 ;; person is stronger, and in same location as zombie
 (define-rule (decapitate zombie-game-rules)
