@@ -4,6 +4,7 @@
 (require (planet williams/science/math))
 (require (planet williams/simulation/simulation)
          (planet williams/inference/inference))
+(require (planet williams/animated-canvas/animated-canvas))
 
 ;; __________________________GLOBALS__________________________________
 
@@ -117,8 +118,12 @@
          (begin 
            (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
            (retract ?w)
-           (assert `(walk ,newI ,newJ ,?ID ,(+ 1 ?tw))))       ;; inc actor time to show it's moved
-         (loop)))))
+           (assert `(walk ,newI ,newJ ,?ID ,(+ 1 ?tw))))
+         (loop)) ;; inc actor time to show it's moved
+         (let* ((dc (send canvas get-dc))
+            (width (send canvas get-width))
+            (height (send canvas get-height))) 
+      (send dc draw-ellipse newI newJ 10 10)))))
 
 ; increment timer only when there's nothing left to do... meaning all players have moved
 (define-rule (time-forward walk-rules)
@@ -126,9 +131,24 @@
   ==>
   (retract ?timer)
   (assert `(time ,(+ 1 ?t)))
-  (printf "TIME was: ~a\n\n" ?t))
+  (printf "TIME was: ~a\n\n" ?t)
+  (send canvas swap-bitmaps))
 
 ;______________________________________________________________
+
+;; All the GFX
+;;____________________________________________________________________________________
+(define frame
+  (instantiate frame% ("Zombie Apocalypse")))
+
+(define canvas
+  (instantiate animated-canvas%
+    (frame)
+    (style `(border))
+    (min-width 100)
+    (min-height 100)))
+
+;;____________________________________________________________________________________
 
 ;_____________________________RUN IT___________________________________________________
 
@@ -148,4 +168,5 @@
 ; randomize source
 (random-source-randomize! (current-random-source))
 ;run it
+(send frame show #t)
 (race-to-finish)
