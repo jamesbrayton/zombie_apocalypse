@@ -53,7 +53,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t 100))))                   ;; set time limit here!
+  (?timer <- (time (?t (>= ?t 10000))))                   ;; set time limit here!
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -109,13 +109,13 @@
       ;; decapitate zombie
       (begin 
         (retract ?zombie)
-        (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z))
+        (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z)
+        ;; lower player count by one
+        (replace ?pc `(player-count ,(- ?c 1))))
       ;; zombify person, add time to it so it can't interact
       (begin
         (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)           
-        (replace ?person `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p))))
-  ;; lower player count by one
-  (replace ?pc `(player-count ,(- ?c 1))))
+        (replace ?person `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p)))))
 
 ;; ---------WALKING
 
