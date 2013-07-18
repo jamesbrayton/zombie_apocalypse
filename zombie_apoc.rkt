@@ -41,7 +41,10 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
-
+(define (brush-color label)
+  (cond 
+    [(equal? label 'zombie) "red"]
+    [else "blue"]))
 ;;____________________________________________________________________
 
 ;;______________________________LOGIC_________________________________
@@ -158,7 +161,8 @@
          (loop)) ;; inc actor time to show it's moved
          (let* ((dc (send canvas get-dc))
             (width (send canvas get-width))
-            (height (send canvas get-height))) 
+            (height (send canvas get-height)))
+           (send dc set-brush (brush-color ?label) 'solid)
       (send dc draw-ellipse newI newJ 10 10)))))
 
 ;; ---------TIME INCREMENT
