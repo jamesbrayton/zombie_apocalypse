@@ -9,21 +9,9 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 5)
+(define edge-length 10)
 
 ;;____________________________________________________________________
-
-;;_______________________NOT USED YET_________________________________
-
-;; struct to hold people/zombies
-(define-struct actor (i j type strength speed IQ)) 
-
-;; calculates distance between actors
-(define (distancer a1 a2)
-  (sqrt (+ (expt (- (actor-i a1) (actor-i a2)) 2)
-                (expt (- (actor-j a1) (actor-j a2)) 2))))
-
-;;_____________________________________________________________________
 
 
 ;;____________________________predicate functions______________________
@@ -105,54 +93,47 @@
 
 ;; ---------BATTLE    
     
-;; zombie is stronger, and in same location as person,
-;;  person is now turned to zombie and has to wait
-(define-rule (zombify zombie-game-rules)
-  (?new-zombie <- (actor person ?i ?j ?ID-nz ?t ?str-nz))
-  (?kill <- (actor zombie ?i ?j 
-                    (?ID-k (not (= ?ID-k ?ID-nz)))        ;; probably not needed
-                    ?t
-                    (?str-k (> ?str-k ?str-nz))))
+;; both decapitate and zombify
+(define-rule (close-enough-to-battle zombie-game-rules)
+  ;; both zombie and person are in same time slice
+  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z ?t ?str-z))
+  ;; AND they're close enough
+  (?person <- (actor person ?i-p
+                     (?j-p (> 5 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here
+                           (expt (- ?j-z ?j-p) 2)))))
+                     ?ID-p ?t ?str-p))
   (?pc <- (player-count ?c))
   ==>
-  (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-k ?ID-nz)
-  ;; zombify person, add to their time to stall their motion                      ;; wait time is here
-  (replace ?new-zombie `(actor zombie ,?i ,?j ,?ID-nz ,(+ ?t 3) ,?str-nz))        ;; replace used
-  ;; player count lowered
-  (retract ?pc))
-
-;; person is stronger, and in same location as zombie
-(define-rule (decapitate zombie-game-rules)
-  (?die <- (actor zombie ?i ?j ?ID-d ?t ?str-d))
-  (?kill <- (actor person ?i ?j 
-                    (?ID-k (not (= ?ID-k ?ID-d)))        ;; probably not needed
-                    ?t
-                    (?str-k (> ?str-k ?str-d))))
-  (?pc <- (player-count ?c))
-  ==>
-  (printf "TIME: ~a:\tperson ~a killed zombie ~a!\n" ?t ?ID-k ?ID-d)
-  ;; killed off zombie
-  (retract ?die)
-  ;; player count lowered
-  (retract ?pc)
-  (assert `(player-count ,(- ?c 1))))
+  ;; compare strengths to decide if decapitate or zombify
+  (if (< ?str-z ?str-p)
+      ;; decapitate zombie
+      (begin 
+        (retract ?zombie)
+        (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z))
+      ;; zombify person, add time to it so it can't interact
+      (begin
+        (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)           
+        (replace ?person `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p))))
+  ;; lower player count by one
+  (replace ?pc `(player-count ,(- ?c 1))))
 
 ;; ---------WALKING
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
   (?timer <- (time ?t))
-  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))          ;; ?label can be 'zombie or 'person
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))
   ==>
   ;; doesn't leave loop until a valid move is made inside the board
-  (let loop ()                                                          ;; goes until a valid move is made
+  (let loop ()                         
     (let ([newI (+ ?i (rand-move))]
           [newJ (+ ?j (rand-move))])
        (if (and (valid-move? newI) (valid-move? newJ))                  ;; put a wall check here too
          (begin 
-           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)  ;; should be ?t-a
+           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
            (retract ?actor)
-           (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       ;; inc actor time to show it's moved
+           ;; ++ actor time to show it's moved
+           (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       
          (loop)))))
 
 ;; ---------TIME INCREMENT
