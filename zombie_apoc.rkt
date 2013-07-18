@@ -10,21 +10,10 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 400)
+(define edge-length 10)
+(define players 15)
 
 ;;____________________________________________________________________
-
-;;_______________________NOT USED YET_________________________________
-
-;; struct to hold people/zombies
-(define-struct actor (i j type strength speed IQ)) 
-
-;; calculates distance between actors
-(define (distancer a1 a2)
-  (sqrt (+ (expt (- (actor-i a1) (actor-i a2)) 2)
-                (expt (- (actor-j a1) (actor-j a2)) 2))))
-
-;;_____________________________________________________________________
 
 
 ;;____________________________predicate functions______________________
@@ -83,6 +72,20 @@
   (printf "~a WINS THE GAME\n" ?ID)
   (succeed))
 
+;; GOAL state only people remain
+(define-rule (people-win zombie-game-rules)
+  (no (actor zombie . ?))
+  ==>
+  (printf "PEOPLE SURVIVED APOCALYPSE!!!")
+  (succeed))
+
+;; GOAL state only zombies remain
+(define-rule (zombies-win zombie-game-rules)
+  (no (actor person . ?))
+  ==>
+  (printf "ZOMBIES TAKE OVER!!!")
+  (succeed))
+
 ;; ---------START
 
 ;; START state for predicate states-randomly assigns a valid starting point
@@ -94,68 +97,62 @@
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              ;; first time -1
+    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
     (retract ?start)
     ;; randomly create a zombie or person
-    (if (< 0.5 (random))                                                           ;; change z / p ratio here
-        ;; normal-distribution of strength
+    (if (< 0.5 (random))                                                           ;; change z / p ratio here--------
+        ;; normal-distribution of strength, starts at time -1
         (begin
           (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here-----------
           (printf "zombie made\n"))
         (begin
           (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here------------
           (printf "person made\n")))))
 
 ;; ---------BATTLE    
     
-;; zombie is stronger, and in same location as person,
-;;  person is now turned to zombie and has to wait
-(define-rule (zombify zombie-game-rules)
-  (?new-zombie <- (actor person ?i ?j ?ID-nz ?t ?str-nz))
-  (?kill <- (actor zombie ?i ?j 
-                    (?ID-k (not (= ?ID-k ?ID-nz)))        ;; probably not needed
-                    ?t
-                    (?str-k (> ?str-k ?str-nz))))
+;; both decapitate and zombify
+(define-rule (close-enough-to-battle zombie-game-rules)
+  ;; both zombie and person are in same time slice
+  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z ?t ?str-z))
+  ;; AND they're close enough
+  (?person <- (actor person ?i-p
+                     (?j-p (> 5 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
+                           (expt (- ?j-z ?j-p) 2)))))
+                     ?ID-p ?t ?str-p))
   (?pc <- (player-count ?c))
   ==>
-  (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-k ?ID-nz)
-  ;; zombify person, add to their time to stall their motion                      ;; wait time is here
-  (replace ?new-zombie `(actor zombie ,?i ,?j ,?ID-nz ,(+ ?t 3) ,?str-nz))        ;; replace used
-  ;; player count lowered
-  (retract ?pc))
-
-;; person is stronger, and in same location as zombie
-(define-rule (decapitate zombie-game-rules)
-  (?die <- (actor zombie ?i ?j ?ID-d ?t ?str-d))
-  (?kill <- (actor person ?i ?j 
-                    (?ID-k (not (= ?ID-k ?ID-d)))        ;; probably not needed
-                    ?t
-                    (?str-k (> ?str-k ?str-d))))
-  (?pc <- (player-count ?c))
-  ==>
-  (printf "TIME: ~a:\tperson ~a killed zombie ~a!\n" ?t ?ID-k ?ID-d)
-  ;; killed off zombie
-  (retract ?die)
-  ;; player count lowered
-  (retract ?pc)
-  (assert `(player-count ,(- ?c 1))))
+  ;; compare strengths to decide if decapitate or zombify
+  (if (< ?str-z ?str-p)
+      ;; decapitate zombie
+      (begin 
+        (retract ?zombie)
+        (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z)
+        ;; lower player count by one
+        (retract ?pc)
+        (assert `(player-count ,(- ?c 1))))
+      ;; zombify person, add time to it so it can't interact
+      (begin
+        (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
+        (retract ?person)
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p)))))
 
 ;; ---------WALKING
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
   (?timer <- (time ?t))
-  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))          ;; ?label can be 'zombie or 'person
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))
   ==>
   ;; doesn't leave loop until a valid move is made inside the board
-  (let loop ()                                                          ;; goes until a valid move is made
+  (let loop ()                         
     (let ([newI (+ ?i (rand-move))]
           [newJ (+ ?j (rand-move))])
        (if (and (valid-move? newI) (valid-move? newJ))                  ;; put a wall check here too
          (begin 
-           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)  ;; should be ?t-a
+           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
            (retract ?actor)
            (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       ;; inc actor time to show it's moved
          (loop)) ;; inc actor time to show it's moved
@@ -200,19 +197,13 @@
    ; needed for top to bottom ordering of the rules
    (current-inference-strategy 'order)
    (activate zombie-game-rules)
-   ;; start state.... where we could put our randomly made zombies
-   (assert '(start 1))
-   (assert '(start 2))
-   (assert '(start 3))
-   (assert '(start 4))
-   (assert '(start 5))
-   (assert '(start 6))
-   (assert '(start 7))
-   (assert '(start 8))
-   (assert '(start 9))
-   (assert '(start 10))
-   (assert '(time 1))                        ;; timer keeps track of the turns
-   (assert '(player-count 3))                ;; for an end state to see winner
+   ;; timer keeps track of the turns
+   (assert '(time 1))                        
+   ;; for an end state to see winner
+   (assert `(player-count ,players))                
+   ;; create the players based on players GLOBAL
+   (for ((i (in-range players)))
+     (assert `(start ,i)))
    (start-inference)))
 
 ; randomize source
