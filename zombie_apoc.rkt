@@ -9,7 +9,7 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 50)
+(define edge-length 10)
 (define players 15)
 
 ;;____________________________________________________________________
@@ -54,7 +54,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t 10000))))                                            ;; set time limit here!---------
+  (?timer <- (time (?t (>= ?t 100))))                                            ;; set time limit here!---------
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -67,18 +67,18 @@
   (printf "~a WINS THE GAME\n" ?ID)
   (succeed))
 
+;; GOAL state only people remain
+(define-rule (people-win zombie-game-rules)
+  (no (actor zombie . ?))
+  ==>
+  (printf "PEOPLE SURVIVED APOCALYPSE!!!")
+  (succeed))
+
 ;; GOAL state only zombies remain
 (define-rule (zombies-win zombie-game-rules)
   (no (actor person . ?))
   ==>
   (printf "ZOMBIES TAKE OVER!!!")
-  (succeed))
-
-;; GOAL state only people remain
-(define-rule (people-win zombie-game-rules)
-  (no (actor person . ?))
-  ==>
-  (printf "PEOPLE SURVIVED APOCALYPSE!!!")
   (succeed))
 
 ;; ---------START
@@ -126,11 +126,13 @@
         (retract ?zombie)
         (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z)
         ;; lower player count by one
-        (replace ?pc `(player-count ,(- ?c 1))))
+        (retract ?pc)
+        (assert `(player-count ,(- ?c 1))))
       ;; zombify person, add time to it so it can't interact
       (begin
-        (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)           
-        (replace ?person `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p)))))
+        (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
+        (retract ?person)
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p)))))
 
 ;; ---------WALKING
 
