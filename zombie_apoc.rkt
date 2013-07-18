@@ -9,7 +9,8 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 10)
+(define edge-length 50)
+(define players 15)
 
 ;;____________________________________________________________________
 
@@ -53,7 +54,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t 10000))))                   ;; set time limit here!
+  (?timer <- (time (?t (>= ?t 10000))))                                            ;; set time limit here!---------
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -64,6 +65,20 @@
   (?actor <- (actor ?label ?i ?j ?ID ?t ?str))
   ==>
   (printf "~a WINS THE GAME\n" ?ID)
+  (succeed))
+
+;; GOAL state only zombies remain
+(define-rule (zombies-win zombie-game-rules)
+  (no (actor person . ?))
+  ==>
+  (printf "ZOMBIES TAKE OVER!!!")
+  (succeed))
+
+;; GOAL state only people remain
+(define-rule (people-win zombie-game-rules)
+  (no (actor person . ?))
+  ==>
+  (printf "PEOPLE SURVIVED APOCALYPSE!!!")
   (succeed))
 
 ;; ---------START
@@ -77,18 +92,18 @@
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              ;; first time -1
+    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
     (retract ?start)
     ;; randomly create a zombie or person
-    (if (< 0.5 (random))                                                           ;; change z / p ratio here
-        ;; normal-distribution of strength
+    (if (< 0.5 (random))                                                           ;; change z / p ratio here--------
+        ;; normal-distribution of strength, starts at time -1
         (begin
           (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here-----------
           (printf "zombie made\n"))
         (begin
           (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here
+                          ,(random-gaussian 100 10)))                              ;; change str dist here------------
           (printf "person made\n")))))
 
 ;; ---------BATTLE    
@@ -99,7 +114,7 @@
   (?zombie <- (actor zombie ?i-z ?j-z ?ID-z ?t ?str-z))
   ;; AND they're close enough
   (?person <- (actor person ?i-p
-                     (?j-p (> 5 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here
+                     (?j-p (> 5 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
                            (expt (- ?j-z ?j-p) 2)))))
                      ?ID-p ?t ?str-p))
   (?pc <- (player-count ?c))
@@ -156,12 +171,13 @@
    ; needed for top to bottom ordering of the rules
    (current-inference-strategy 'order)
    (activate zombie-game-rules)
-   ;; start state.... where we could put our randomly made zombies
-   (assert '(start 1))
-   (assert '(start 2))
-   (assert '(start 3))
-   (assert '(time 1))                        ;; timer keeps track of the turns
-   (assert '(player-count 3))                ;; for an end state to see winner
+   ;; timer keeps track of the turns
+   (assert '(time 1))                        
+   ;; for an end state to see winner
+   (assert `(player-count ,players))                
+   ;; create the players based on players GLOBAL
+   (for ((i (in-range players)))
+     (assert `(start ,i)))
    (start-inference)))
 
 ; randomize source
