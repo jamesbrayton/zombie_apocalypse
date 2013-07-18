@@ -10,7 +10,7 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 5)
+(define edge-length 400)
 
 ;;____________________________________________________________________
 
@@ -41,6 +41,7 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
+
 ;;____________________________________________________________________
 
 ;;______________________________LOGIC_________________________________
@@ -66,7 +67,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t 100))))                   ;; set time limit here!
+  (?timer <- (time (?t (>= ?t 1000))))                   ;; set time limit here!
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -183,8 +184,8 @@
   (instantiate animated-canvas%
     (frame)
     (style `(border))
-    (min-width 100)
-    (min-height 100)))
+    (min-width 400)
+    (min-height 600)))
 
 ;;____________________________________________________________________________________
 
@@ -199,6 +200,13 @@
    (assert '(start 1))
    (assert '(start 2))
    (assert '(start 3))
+   (assert '(start 4))
+   (assert '(start 5))
+   (assert '(start 6))
+   (assert '(start 7))
+   (assert '(start 8))
+   (assert '(start 9))
+   (assert '(start 10))
    (assert '(time 1))                        ;; timer keeps track of the turns
    (assert '(player-count 3))                ;; for an end state to see winner
    (start-inference)))
