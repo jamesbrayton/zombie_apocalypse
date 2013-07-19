@@ -30,10 +30,11 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
-(define (brush-color label)
-  (cond 
-    [(equal? label 'zombie) "red"]
-    [else "blue"]))
+(define (brush-color label str)
+  (cond
+    ;We have to add a little fudge to each color to get better colors
+    [(equal? label 'zombie) (make-color (+ 75 (inexact->exact (round str))) 0  0 1.0)]
+    [else (make-color 0 0 (+ 75 (inexact->exact (round str))) 1.0)]))
 ;;____________________________________________________________________
 
 ;;______________________________LOGIC_________________________________
@@ -159,7 +160,7 @@
          (let* ((dc (send canvas get-dc))
             (width (send canvas get-width))
             (height (send canvas get-height)))
-           (send dc set-brush (brush-color ?label) 'solid)
+           (send dc set-brush (brush-color ?label ?str) 'solid)
       (send dc draw-ellipse newI newJ 10 10)))))
 
 ;; Draw the dead people
@@ -170,8 +171,9 @@
    (let* ((dc (send canvas get-dc))
             (width (send canvas get-width))
             (height (send canvas get-height)))
-           (send dc set-brush "grey" 'solid)
+           (send dc set-brush (make-color 0 0 0 .5) 'solid)
       (send dc draw-ellipse ?i ?j 10 10)))
+
 ;; ---------TIME INCREMENT
 
 ;; increment timer only when there's nothing left to do...
