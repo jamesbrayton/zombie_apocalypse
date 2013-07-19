@@ -30,9 +30,28 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
+;; picks direction to move, in radians
+(define (rand-angle)
+  (* (random) (* 2 pi)))
+
+;; trig used for y, y-dist = speed * sin(theta)
+(define (rand-move-trig-Y actor-speed angle-rads)
+  (* actor-speed (sin angle-rads)))
+
+;; trig used for x
+(define (rand-move-trig-X actor-speed angle-rads)
+  (* actor-speed (cos angle-rads)))
+
+;; calculate angle between zombie and person in rads, 
+;;  minute chance it could have div-by-zero error
+(define (point-to-person iz jz ip jp)
+  (atan (/ (- jz jp) (- iz ip))))
+
+;; brush coloration RGB based on strength, if str is too high 
+;;  (> 255), coloration won't be valid
 (define (brush-color label str)
   (cond
-    ;We have to add a little fudge to each color to get better colors
+    ;; We have to add a little fudge to each color to get better colors
     [(equal? label 'zombie) (make-color (+ 50 (inexact->exact (round str))) 0  0 1.0)]
     [else (make-color 0 0 (+ 50 (inexact->exact (round str))) 1.0)]))
 ;;____________________________________________________________________
@@ -40,8 +59,8 @@
 ;;______________________________LOGIC_________________________________
 
 ;; info floating around:
-;; ('actor label i j ID time strength speed)                        ;; speed not yet implemented
-;; - label : 'zombie | 'person
+;; ('actor label i j ID time strength speed)
+;;  label : 'zombie | 'person
 ;; (player-count #)
 ;; (time #)
 
@@ -50,6 +69,7 @@
 ; start
 ; battle
 ; walk
+; draw dead
 ; time inc
 
 ;; staggering around to a goal not using the actor struct,
@@ -60,7 +80,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t 1000))))                   ;; set time limit here!
+  (?timer <- (time (?t (>= ?t +inf.0))))                                               ;; set time limit here------
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -68,7 +88,7 @@
 ;; GOAL state one remains
 (define-rule (one-left zombie-game-rules)
   (?pc <- (player-count (?c (= 1 ?c))))
-  (?actor <- (actor ?label ?i ?j ?ID ?t ?str))
+  (?actor <- (actor ?label ?i ?j ?ID ?t ?str ?sp))
   ==>
   (printf "~a WINS THE GAME\n" ?ID)
   (succeed))
@@ -98,31 +118,42 @@
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    (printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
+    ;(printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
     (retract ?start)
     ;; randomly create a zombie or person
-    (if (< 0.5 (random))                                                           ;; change z / p ratio here--------
+    (if (< 0.5 (random))                                                          ;; change z / p ratio here--------
         ;; normal-distribution of strength, starts at time -1
         (begin
           (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here-----------
-          (printf "zombie made\n"))
+                          ,(random-gaussian 100 30)                               ;; change str dist here-----------
+                          ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
+          ;(printf "zombie made\n")
+          )
         (begin
           (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 10)))                              ;; change str dist here------------
-          (printf "person made\n")))))
+                          ,(random-gaussian 100 30)                               ;; change str dist here-----------
+                          ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
+          ;(printf "person made\n")
+          ))))
 
 ;; ---------BATTLE    
     
 ;; both decapitate and zombify
 (define-rule (close-enough-to-battle zombie-game-rules)
   ;; both zombie and person are in same time slice
-  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z ?t ?str-z))
+  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z ?t ?str-z ?sp-z))
   ;; AND they're close enough
-  (?person <- (actor person ?i-p
-                     (?j-p (> 5 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
-                           (expt (- ?j-z ?j-p) 2)))))
-                     ?ID-p ?t ?str-p))
+  (?person <- (actor
+               person 
+               ?i-p
+               ;; distance function
+               (?j-p (> 8 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
+                     (expt (- ?j-z ?j-p) 2)))))
+               ?ID-p 
+               ?t 
+               ?str-p
+               ?sp-p))
+  ;; this will -- if decapitate is called
   (?pc <- (player-count ?c))
   ==>
   ;; compare strengths to decide if decapitate or zombify
@@ -130,49 +161,90 @@
       ;; decapitate zombie
       (begin 
         (retract ?zombie)
-        (printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z)
+        ;(printf "TIME: ~a:\tperson ~a decapitated zombie ~a!\n" ?t ?ID-p ?ID-z)
         ;; lower player count by one
         (retract ?pc)
         (assert `(player-count ,(- ?c 1))))
       ;; zombify person, add time to it so it can't interact
       (begin
-        (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
+        ;(printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
         (retract ?person)
-        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 300) ,?str-p)))))
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 90) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
 
 ;; ---------WALKING
+
+;; zombie sees person, walks toward them... this must change when
+;;  walls are placed because a move could not be valid
+(define-rule (in-line-of-sight zombie-game-rules)
+  ;; timer needed
+  (?timer <- (time ?t))
+  ;; zombie and person are in same time slice ?T that's less than ?t 
+  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z (?T (< ?T ?t)) ?str-z ?sp-z))
+  ;; AND they're close enough for sight
+  (?person <- (actor
+               person
+               ?i-p
+               ;; distance function
+               (?j-p (> 45 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
+                     (expt (- ?j-z ?j-p) 2)))))
+               ?ID-p
+               ?T 
+               ?str-p
+               ?sp-p))
+  ==>
+  ;; try to move toward person
+  (let* ([to-person (point-to-person ?i-z ?j-z ?i-p ?j-p)]
+         [newI (+ ?i-z (rand-move-trig-X ?sp-z to-person))]
+         [newJ (+ ?j-z (rand-move-trig-Y ?sp-z to-person))])
+    ;(printf "seen\n")
+    ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
+    (retract ?zombie)
+    ;; inc actor time to show it's moved
+    (assert `(actor zombie ,newI ,newJ ,?ID-z ,(+ 1 ?T) ,?str-z ,?sp-z))
+    ;; drawing zombies in new location
+    (let* ((dc (send canvas get-dc))
+           (width (send canvas get-width))
+           (height (send canvas get-height)))
+      (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
+      (send dc draw-ellipse newI newJ 10 10))))     
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
   (?timer <- (time ?t))
-  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str))
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str ?sp))
   ==>
   ;; doesn't leave loop until a valid move is made inside the board
   (let loop ()                         
-    (let ([newI (+ ?i (rand-move))]
-          [newJ (+ ?j (rand-move))])
-       (if (and (valid-move? newI) (valid-move? newJ))                  ;; put a wall check here too
-         (begin 
-           (printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
-           (retract ?actor)
-           (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str)))       ;; inc actor time to show it's moved
-         (loop)) ;; inc actor time to show it's moved
-         (let* ((dc (send canvas get-dc))
-            (width (send canvas get-width))
-            (height (send canvas get-height)))
-           (send dc set-brush (brush-color ?label ?str) 'solid)
-      (send dc draw-ellipse newI newJ 10 10)))))
+    (let* ([rand-dir (rand-angle)]
+           [newI (+ ?i (rand-move-trig-X ?sp rand-dir))]
+           [newJ (+ ?j (rand-move-trig-Y ?sp rand-dir))])
+      (if (and (valid-move? newI) (valid-move? newJ))                              ;; put a wall check here too
+          (begin 
+            ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
+            (retract ?actor)
+            ;; inc actor time to show it's moved
+            (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str ,?sp)))       
+          (loop))
+      ;; drawing actors in new location
+      (let* ((dc (send canvas get-dc))
+             (width (send canvas get-width))
+             (height (send canvas get-height)))
+        (send dc set-brush (brush-color ?label ?str) 'solid)        
+        (send dc draw-ellipse newI newJ 10 10)))))
 
-;; Draw the dead people
+;; ---------DRAW RULE
+
+;; Draw the dead people b/c they're in a future time slice after zombification
 (define-rule (draw-dead zombie-game-rules)
   (?timer <- (time ?t))
-  (?actor <- (actor ?label ?i ?j ?ID (?t-a (> ?t-a ?t)) ?str))
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (> ?t-a ?t)) ?str ?sp))
   ==>
    (let* ((dc (send canvas get-dc))
-            (width (send canvas get-width))
-            (height (send canvas get-height)))
-           (send dc set-brush (make-color 0 0 0 .5) 'solid)
-      (send dc draw-ellipse ?i ?j 10 10)))
+          (width (send canvas get-width))
+          (height (send canvas get-height)))
+     ;; dead are grey
+     (send dc set-brush (make-color 0 0 0 .5) 'solid)
+     (send dc draw-ellipse ?i ?j 10 10)))
 
 ;; ---------TIME INCREMENT
 
@@ -183,13 +255,13 @@
   ==>
   (retract ?timer)
   (assert `(time ,(+ 1 ?t)))
-  (printf "TIME was: ~a\n\n" ?t)
+  ;(printf "TIME was: ~a\n\n" ?t)
   (send canvas swap-bitmaps))
 
 ;______________________________________________________________
 
 ;; All the GFX
-;;____________________________________________________________________________________
+;;_____________________________________________________________
 (define frame
   (instantiate frame% ("Zombie Apocalypse")))
 
@@ -200,9 +272,9 @@
     (min-width 400)
     (min-height 600)))
 
-;;____________________________________________________________________________________
-
-;_____________________________RUN IT___________________________________________________
+;;______________________________________________________________
+  
+;_____________________________RUN IT____________________________
 
 (define (run-zombie-sim)
   (with-new-inference-environment
