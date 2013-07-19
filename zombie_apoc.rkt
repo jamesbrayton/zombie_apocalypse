@@ -33,8 +33,8 @@
 (define (brush-color label str)
   (cond
     ;We have to add a little fudge to each color to get better colors
-    [(equal? label 'zombie) (make-color (+ 75 (inexact->exact (round str))) 0  0 1.0)]
-    [else (make-color 0 0 (+ 75 (inexact->exact (round str))) 1.0)]))
+    [(equal? label 'zombie) (make-color (+ 50 (inexact->exact (round str))) 0  0 1.0)]
+    [else (make-color 0 0 (+ 50 (inexact->exact (round str))) 1.0)]))
 ;;____________________________________________________________________
 
 ;;______________________________LOGIC_________________________________
