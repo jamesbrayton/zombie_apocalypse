@@ -11,7 +11,7 @@
 ;; __________________________GLOBALS__________________________________
 
 (define edge-length 400)
-(define players 50)
+(define players 5)
 
 ;;____________________________________________________________________
 
@@ -30,7 +30,7 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
-;; picks direction to move, in radians
+;; picks direction to move, in radians [0, 2pi)
 (define (rand-angle)
   (* (random) (* 2 pi)))
 
@@ -45,7 +45,9 @@
 ;; calculate angle between zombie and person in rads, 
 ;;  minute chance it could have div-by-zero error
 (define (point-to-person iz jz ip jp)
-  (atan (/ (- jz jp) (- iz ip))))
+  (if (= (- iz ip) 0)
+      (atan (/ (- jz jp) 0.0000001))
+      (atan (/ (- jz jp) (- iz ip)))))
 
 ;; brush coloration RGB based on strength, if str is too high 
 ;;  (> 255), coloration won't be valid
@@ -125,13 +127,13 @@
         ;; normal-distribution of strength, starts at time -1
         (begin
           (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 30)                               ;; change str dist here-----------
+                          ,(random-gaussian 100 15)                               ;; change str dist here-----------
                           ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
           ;(printf "zombie made\n")
           )
         (begin
           (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 30)                               ;; change str dist here-----------
+                          ,(random-gaussian 100 15)                               ;; change str dist here-----------
                           ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
           ;(printf "person made\n")
           ))))
@@ -185,7 +187,7 @@
                person
                ?i-p
                ;; distance function
-               (?j-p (> 45 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
+               (?j-p (> 100 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
                      (expt (- ?j-z ?j-p) 2)))))
                ?ID-p
                ?T 
@@ -219,12 +221,16 @@
            [newI (+ ?i (rand-move-trig-X ?sp rand-dir))]
            [newJ (+ ?j (rand-move-trig-Y ?sp rand-dir))])
       (if (and (valid-move? newI) (valid-move? newJ))                              ;; put a wall check here too
+          ;; new position is on the board
           (begin 
             ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
             (retract ?actor)
             ;; inc actor time to show it's moved
             (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str ,?sp)))       
-          (loop))
+          ;; new position is OFF the board, try again
+          (begin
+            (printf "TIME ~a:\t~a ~a failed to walk from (~a, ~a)\n" ?t-a ?label ?ID newI newJ)
+            (loop)))
       ;; drawing actors in new location
       (let* ((dc (send canvas get-dc))
              (width (send canvas get-width))
