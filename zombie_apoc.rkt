@@ -10,8 +10,8 @@
 
 ;; __________________________GLOBALS__________________________________
 
-(define edge-length 10)
-(define players 15)
+(define edge-length 400)
+(define players 50)
 
 ;;____________________________________________________________________
 
@@ -137,7 +137,7 @@
       (begin
         (printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
         (retract ?person)
-        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 3) ,?str-p)))))
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 300) ,?str-p)))))
 
 ;; ---------WALKING
 
@@ -162,6 +162,16 @@
            (send dc set-brush (brush-color ?label) 'solid)
       (send dc draw-ellipse newI newJ 10 10)))))
 
+;; Draw the dead people
+(define-rule (draw-dead zombie-game-rules)
+  (?timer <- (time ?t))
+  (?actor <- (actor ?label ?i ?j ?ID (?t-a (> ?t-a ?t)) ?str))
+  ==>
+   (let* ((dc (send canvas get-dc))
+            (width (send canvas get-width))
+            (height (send canvas get-height)))
+           (send dc set-brush "grey" 'solid)
+      (send dc draw-ellipse ?i ?j 10 10)))
 ;; ---------TIME INCREMENT
 
 ;; increment timer only when there's nothing left to do...
