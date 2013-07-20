@@ -18,10 +18,6 @@
 
 ;;____________________________predicate functions______________________
 
-;; walk that just is [-1,1], apply to i and j
-(define (rand-move)
-  (+ (random-integer 3) -1))
-
 ;; pick a random spot within the bounds to start
 (define (random-start)
   (random-integer edge-length))                       ;; uses edge-length GLOBAL
@@ -35,13 +31,13 @@
   (* (random) (/ pi 2)))
 
 ;; pick x and y quadrants randomly, y-dir = speed * sin(theta)
-(define (rand-move-trig-Y speed rand-corner)
+(define (rand-move-Y speed rand-corner)
   (if (< 0.5 (random))
       (* speed (sin rand-corner))
       (* (* speed -1) (sin rand-corner))))
 
 ;; pick x and y quadrants randomly, x-dir = speed * cos(theta)
-(define (rand-move-trig-X speed rand-corner)
+(define (rand-move-X speed rand-corner)
   (if (< 0.5 (random))
       (* speed (cos rand-corner))
       (* (* speed -1) (cos rand-corner))))
@@ -50,20 +46,33 @@
 ;;  minute chance it could have div-by-zero error
 (define (point-to-person iz jz ip jp)
   (if (= (- ip iz) 0)
-      ;; randomly pick close value to 0
-      (atan (/ (- jp jz) (if (< 0.5 (random)) 0.0000001 -0.0000001)))
-      (atan (/ (- jp jz) (- ip iz)))))
+      ;; prevents DIV-BY-ZERO error
+      (abs (atan (/ (- jp jz) 0.00000000001)))
+      (abs (atan (/ (- jp jz) (- ip iz))))))
 
-;; chops down angle until it's less than 90 deg
-(define (reduce-angle a)
-  (let loop ([A a])
-        (if (>= A (/ pi 2))
-            (loop (- A (/ pi 2)))
-            A)))
+;; takes zombie info when it sees person and gives new movement value
+;;  in X direction based on relative quadrant person is to it
+(define (point-move-X speed iz jz ip jp)
+  (let* ([angle (point-to-person iz jz ip jp)])
+    (case (quad-calc (- ip iz) (- jp jz))
+      [(1) (* speed (cos angle))]
+      [(2) (* speed (cos (- pi angle)))]
+      [(3) (* speed (cos (+ pi angle)))]
+      [(4) (* speed (cos (- (* 2 pi) angle)))])))
+
+;; takes zombie info when it sees person and gives new movement value
+;;  in Y direction based on relative quadrant person is to it
+(define (point-move-Y speed iz jz ip jp)
+  (let* ([angle (point-to-person iz jz ip jp)])
+    (case (quad-calc (- ip iz) (- jp jz))
+      [(1) (* speed (sin angle))]
+      [(2) (* speed (sin (- pi angle)))]
+      [(3) (* speed (sin (+ pi angle)))]
+      [(4) (* speed (sin (- (* 2 pi) angle)))])))
 
 ;; calcs quadrant based on x y values
 (define (quad-calc i j)
-  (case `(,(< 0 i) ,(< 0 j))
+  (case `(,(<= 0 i) ,(<= 0 j))
     ['(#t #t) 1]
     ['(#f #t) 2]
     ['(#f #f) 3]
@@ -112,7 +121,7 @@
   (?pc <- (player-count (?c (= 1 ?c))))
   (?actor <- (actor ?label ?i ?j ?ID ?t ?str ?sp))
   ==>
-  (printf "~a WINS THE GAME\n" ?ID)
+  (printf "~a KILLED EVERYONE!\n" ?ID)
   (succeed))
 
 ;; GOAL state only people remain
@@ -195,7 +204,41 @@
 
 ;; ---------WALKING
 
-;; sight rule goes here
+;; zombie sees person, walks toward them... this must change when
+;;  walls are placed because a move could not be valid
+(define-rule (in-line-of-sight zombie-game-rules)
+  ;; timer needed
+  (?timer <- (time ?t))
+  ;; zombie and person are in same time slice ?T that's less than ?t 
+  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z (?T (< ?T ?t)) ?str-z ?sp-z))
+  ;; AND they're close enough for sight
+  (?person <- (actor
+               person
+               ?i-p
+               ;; distance function
+               (?j-p (> 110 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
+                     (expt (- ?j-z ?j-p) 2)))))
+               ?ID-p
+               ?T 
+               ?str-p
+               ?sp-p))
+  ==>
+  ;; try to move toward person
+  (let* ([I (+ ?i-z (point-move-X ?sp-z ?i-z ?j-z ?i-p ?j-p))]
+         [J (+ ?j-z (point-move-Y ?sp-z ?i-z ?j-z ?i-p ?j-p))]
+         [newI (if (valid-move? I) I ?i-z)]
+         [newJ (if (valid-move? J) J ?j-z)])
+    ;(printf "seen\n")
+    ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
+    (retract ?zombie)
+    ;; inc actor time to show it's moved
+    (assert `(actor zombie ,newI ,newJ ,?ID-z ,(+ 1 ?T) ,?str-z ,?sp-z))
+    ;; drawing zombies in new location
+    (let* ((dc (send canvas get-dc))
+           (width (send canvas get-width))
+           (height (send canvas get-height)))
+      (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
+      (send dc draw-ellipse newI newJ 10 10))))     
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
@@ -204,8 +247,8 @@
   ==>
   ;; set I/J back to ?i/?j if they're over an edge boundary          
   (let* ([rand-dir (rand-angle)]
-         [I (+ ?i (rand-move-trig-X ?sp rand-dir))]
-         [J (+ ?j (rand-move-trig-Y ?sp rand-dir))]
+         [I (+ ?i (rand-move-X ?sp rand-dir))]
+         [J (+ ?j (rand-move-Y ?sp rand-dir))]
          [newI (if (valid-move? I) I ?i)]
          [newJ (if (valid-move? J) J ?j)])
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
@@ -265,7 +308,7 @@
 
 (define (run-zombie-sim)
   (with-new-inference-environment
-   ; needed for top to bottom ordering of the rules
+   ;; needed for top to bottom ordering of the rules
    (current-inference-strategy 'order)
    (activate zombie-game-rules)
    ;; timer keeps track of the turns
@@ -277,8 +320,8 @@
      (assert `(start ,i)))
    (start-inference)))
 
-; randomize source
+;; randomize source
 (random-source-randomize! (current-random-source))
-;run it
+;; run it
 (send frame show #t)
 (run-zombie-sim)
