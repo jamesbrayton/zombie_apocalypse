@@ -11,7 +11,7 @@
 ;; __________________________GLOBALS__________________________________
 
 (define edge-length 400)
-(define players 5)
+(define players 50)
 
 ;;____________________________________________________________________
 
@@ -32,22 +32,42 @@
 
 ;; picks direction to move, in radians [0, 2pi)
 (define (rand-angle)
-  (* (random) (* 2 pi)))
+  (* (random) (/ pi 2)))
 
-;; trig used for y, y-dist = speed * sin(theta)
-(define (rand-move-trig-Y actor-speed angle-rads)
-  (* actor-speed (sin angle-rads)))
+;; pick x and y quadrants randomly, y-dir = speed * sin(theta)
+(define (rand-move-trig-Y speed rand-corner)
+  (if (< 0.5 (random))
+      (* speed (sin rand-corner))
+      (* (* speed -1) (sin rand-corner))))
 
-;; trig used for x
-(define (rand-move-trig-X actor-speed angle-rads)
-  (* actor-speed (cos angle-rads)))
+;; pick x and y quadrants randomly, x-dir = speed * cos(theta)
+(define (rand-move-trig-X speed rand-corner)
+  (if (< 0.5 (random))
+      (* speed (cos rand-corner))
+      (* (* speed -1) (cos rand-corner))))
 
 ;; calculate angle between zombie and person in rads, 
 ;;  minute chance it could have div-by-zero error
 (define (point-to-person iz jz ip jp)
-  (if (= (- iz ip) 0)
-      (atan (/ (- jz jp) 0.0000001))
-      (atan (/ (- jz jp) (- iz ip)))))
+  (if (= (- ip iz) 0)
+      ;; randomly pick close value to 0
+      (atan (/ (- jp jz) (if (< 0.5 (random)) 0.0000001 -0.0000001)))
+      (atan (/ (- jp jz) (- ip iz)))))
+
+;; chops down angle until it's less than 90 deg
+(define (reduce-angle a)
+  (let loop ([A a])
+        (if (>= A (/ pi 2))
+            (loop (- A (/ pi 2)))
+            A)))
+
+;; calcs quadrant based on x y values
+(define (quad-calc i j)
+  (case `(,(< 0 i) ,(< 0 j))
+    ['(#t #t) 1]
+    ['(#f #t) 2]
+    ['(#f #f) 3]
+    ['(#t #f) 4]))
 
 ;; brush coloration RGB based on strength, if str is too high 
 ;;  (> 255), coloration won't be valid
@@ -149,7 +169,7 @@
                person 
                ?i-p
                ;; distance function
-               (?j-p (> 8 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
+               (?j-p (> 9 (sqrt (+ (expt (- ?i-z ?i-p) 2)                    ;; change battle distance here------
                      (expt (- ?j-z ?j-p) 2)))))
                ?ID-p 
                ?t 
@@ -171,72 +191,33 @@
       (begin
         ;(printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
         (retract ?person)
-        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 90) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 30) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
 
 ;; ---------WALKING
 
-;; zombie sees person, walks toward them... this must change when
-;;  walls are placed because a move could not be valid
-(define-rule (in-line-of-sight zombie-game-rules)
-  ;; timer needed
-  (?timer <- (time ?t))
-  ;; zombie and person are in same time slice ?T that's less than ?t 
-  (?zombie <- (actor zombie ?i-z ?j-z ?ID-z (?T (< ?T ?t)) ?str-z ?sp-z))
-  ;; AND they're close enough for sight
-  (?person <- (actor
-               person
-               ?i-p
-               ;; distance function
-               (?j-p (> 100 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
-                     (expt (- ?j-z ?j-p) 2)))))
-               ?ID-p
-               ?T 
-               ?str-p
-               ?sp-p))
-  ==>
-  ;; try to move toward person
-  (let* ([to-person (point-to-person ?i-z ?j-z ?i-p ?j-p)]
-         [newI (+ ?i-z (rand-move-trig-X ?sp-z to-person))]
-         [newJ (+ ?j-z (rand-move-trig-Y ?sp-z to-person))])
-    ;(printf "seen\n")
-    ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
-    (retract ?zombie)
-    ;; inc actor time to show it's moved
-    (assert `(actor zombie ,newI ,newJ ,?ID-z ,(+ 1 ?T) ,?str-z ,?sp-z))
-    ;; drawing zombies in new location
-    (let* ((dc (send canvas get-dc))
-           (width (send canvas get-width))
-           (height (send canvas get-height)))
-      (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
-      (send dc draw-ellipse newI newJ 10 10))))     
+;; sight rule goes here
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
   (?timer <- (time ?t))
   (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str ?sp))
   ==>
-  ;; doesn't leave loop until a valid move is made inside the board
-  (let loop ()                         
-    (let* ([rand-dir (rand-angle)]
-           [newI (+ ?i (rand-move-trig-X ?sp rand-dir))]
-           [newJ (+ ?j (rand-move-trig-Y ?sp rand-dir))])
-      (if (and (valid-move? newI) (valid-move? newJ))                              ;; put a wall check here too
-          ;; new position is on the board
-          (begin 
-            ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
-            (retract ?actor)
-            ;; inc actor time to show it's moved
-            (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str ,?sp)))       
-          ;; new position is OFF the board, try again
-          (begin
-            (printf "TIME ~a:\t~a ~a failed to walk from (~a, ~a)\n" ?t-a ?label ?ID newI newJ)
-            (loop)))
-      ;; drawing actors in new location
-      (let* ((dc (send canvas get-dc))
-             (width (send canvas get-width))
-             (height (send canvas get-height)))
-        (send dc set-brush (brush-color ?label ?str) 'solid)        
-        (send dc draw-ellipse newI newJ 10 10)))))
+  ;; set I/J back to ?i/?j if they're over an edge boundary          
+  (let* ([rand-dir (rand-angle)]
+         [I (+ ?i (rand-move-trig-X ?sp rand-dir))]
+         [J (+ ?j (rand-move-trig-Y ?sp rand-dir))]
+         [newI (if (valid-move? I) I ?i)]
+         [newJ (if (valid-move? J) J ?j)])
+    ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
+    (retract ?actor)
+    ;; inc actor time to show it's moved
+    (assert `(actor ,?label ,newI ,newJ ,?ID ,(+ 1 ?t-a) ,?str ,?sp))       
+    ;; drawing actors in new location
+    (let* ((dc (send canvas get-dc))
+           (width (send canvas get-width))
+           (height (send canvas get-height)))
+      (send dc set-brush (brush-color ?label ?str) 'solid)        
+      (send dc draw-ellipse newI newJ 10 10))))
 
 ;; ---------DRAW RULE
 
