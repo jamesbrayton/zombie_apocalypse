@@ -26,6 +26,15 @@
 (define (valid-move? val)
   (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
 
+;; x:200 y:50 w:20 h:500
+;; is the zombie in a rectangle?
+(define (valid-move-rect? I J)
+  (and
+   (and (valid-move? I) (valid-move? J))
+  (or
+  (and (< I 190) (> I 230))
+  (and (< J 40) (> J 510)))))
+
 ;; picks direction to move, in radians [0, 2pi)
 (define (rand-angle)
   (* (random) (/ pi 2)))
@@ -85,6 +94,10 @@
     ;; We have to add a little fudge to each color to get better colors
     [(equal? label 'zombie) (make-color (+ 50 (inexact->exact (round str))) 0  0 1.0)]
     [else (make-color 0 0 (+ 50 (inexact->exact (round str))) 1.0)]))
+
+(define (draw-walls dc)
+  (send dc set-brush "black" 'solid)        
+      (send dc draw-rectangle 200 50 20 500))
 ;;____________________________________________________________________
 
 ;;______________________________LOGIC_________________________________
@@ -226,8 +239,8 @@
   ;; try to move toward person
   (let* ([I (+ ?i-z (point-move-X ?sp-z ?i-z ?j-z ?i-p ?j-p))]
          [J (+ ?j-z (point-move-Y ?sp-z ?i-z ?j-z ?i-p ?j-p))]
-         [newI (if (valid-move? I) I ?i-z)]
-         [newJ (if (valid-move? J) J ?j-z)])
+         [newI (if (valid-move-rect? I J) I ?i-z)]
+         [newJ (if (valid-move-rect? I J) J ?j-z)])
     ;(printf "seen\n")
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?zombie)
@@ -238,7 +251,8 @@
            (width (send canvas get-width))
            (height (send canvas get-height)))
       (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
-      (send dc draw-ellipse newI newJ 10 10))))     
+      (send dc draw-ellipse newI newJ 10 10)
+      (draw-walls dc))))     
 
 ;; walking around within edge-length X edge-length
 (define-rule (random-walking zombie-game-rules)
@@ -260,7 +274,8 @@
            (width (send canvas get-width))
            (height (send canvas get-height)))
       (send dc set-brush (brush-color ?label ?str) 'solid)        
-      (send dc draw-ellipse newI newJ 10 10))))
+      (send dc draw-ellipse newI newJ 10 10)
+      (draw-walls dc))))
 
 ;; ---------DRAW RULE
 
