@@ -8,23 +8,89 @@
          (planet williams/science/math)
          (planet williams/animated-canvas/animated-canvas))
 
-;; __________________________GLOBALS__________________________________
+;; __________________________GLOBALS AND STRUCTS______________________
 
-(define edge-length 400)
-(define players 50)
+(define EDGE-LENGTH 400)
+(define PLAYERS 50)
+
+;; the x and y MUST be the top left coordinates!
+(struct wall (x y w l))
+
+;; holds all of the walls to be checked for collisions
+(define WALL-LST `(,(wall 20 40 300 25) ,(wall 300 300 10 500)))
 
 ;;____________________________________________________________________
 
 
 ;;____________________________predicate functions______________________
 
+
+
+
+
+;;------------------------WALL STUFF
+
+;; not blocked by wall and not of board? then #t, allowing i and j to update
+(define (valid-move? new-i new-j old-i old-j wall-lst edge-len)
+  (andmap (lambda (w) (and (not-thru-wall? new-i new-j old-i old-j w)
+                           (on-board? new-i new-j edge-len))) wall-lst))
+
+;; on the space defined by EDGE-LENGTH?
+(define (on-board? ni nj el)
+  (if (and (and (and (< ni el)
+                     (>= ni 0))
+                (< nj el))
+           (>= nj 0))
+      #t
+      #f))
+
+;; all 4 directions
+(define (not-thru-wall? ni nj oi oj wall)
+  (if (and (and (and (left-okay? ni nj oi oj wall)
+                     (right-okay? ni nj oi oj wall))
+                (up-okay? ni nj oi oj wall))
+           (down-okay? ni nj oi oj wall))
+      #t
+      #f))
+  
+;; the directions, FAIL conditions anded together
+(define (left-okay? ni nj oi oj w)
+  (if (and (and (and (<= nj (+ (wall-y w) (wall-l w)))
+                     (>= nj (wall-y w)))
+                (>= oi (+ (wall-x w) (wall-w w))))
+           (<= ni (+ (wall-w w) (wall-x w))))
+      #f
+      #t))
+
+(define (right-okay? ni nj oi oj w)
+  (if (and (and (and (<= nj (+ (wall-y w) (wall-l w)))
+                     (>= nj (wall-y w)))
+                (<= oi (wall-x w)))
+           (>= ni (wall-x w)))
+      #f
+      #t))
+
+(define (up-okay? ni nj oi oj w)
+  (if (and (and (and (<= ni (+ (wall-x w) (wall-w w)))
+                     (>= ni (wall-x w)))
+                (>= oj (+ (wall-y w) (wall-l w))))
+           (<= nj (+ (wall-y w) (wall-l w))))
+      #f
+      #t))
+
+(define (down-okay? ni nj oi oj w)
+  (if (and (and (and (<= ni (+ (wall-x w) (wall-w w)))
+                     (>= ni (wall-x w)))
+                (<= oj (wall-y w)))
+           (>= nj (wall-y w)))
+      #f
+      #t))
+
+;;---------------------
+
 ;; pick a random spot within the bounds to start
 (define (random-start)
-  (random-integer edge-length))                       ;; uses edge-length GLOBAL
-
-;; within the bounds? 
-(define (valid-move? val)
-  (and (>= val 0) (< val edge-length)))               ;; uses edge-length GLOBAL
+  (random-integer EDGE-LENGTH))                       ;; uses EDGE-LENGTH GLOBAL
 
 ;; picks direction to move, in radians [0, 2pi)
 (define (rand-angle)
@@ -41,6 +107,8 @@
   (if (< 0.5 (random))
       (* speed (cos rand-corner))
       (* (* speed -1) (cos rand-corner))))
+
+;; -----------SEARCHING STUFF
 
 ;; calculate angle between zombie and person in rads, 
 ;;  minute chance it could have div-by-zero error
@@ -78,6 +146,8 @@
     ['(#f #f) 3]
     ['(#t #f) 4]))
 
+;; -------------PAINTING
+
 ;; brush coloration RGB based on strength, if str is too high 
 ;;  (> 255), coloration won't be valid
 (define (brush-color label str)
@@ -101,7 +171,7 @@
 ; battle
 ; walk
 ; draw dead
-; time inc
+; time inc / draw walls / blit screen
 
 ;; staggering around to a goal not using the actor struct,
 ;; but simple state literal lists: '(start i j)
@@ -200,7 +270,7 @@
       (begin
         ;(printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
         (retract ?person)
-        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 30) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 300) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
 
 ;; ---------WALKING
 
@@ -226,8 +296,8 @@
   ;; try to move toward person
   (let* ([I (+ ?i-z (point-move-X ?sp-z ?i-z ?j-z ?i-p ?j-p))]
          [J (+ ?j-z (point-move-Y ?sp-z ?i-z ?j-z ?i-p ?j-p))]
-         [newI (if (valid-move? I) I ?i-z)]
-         [newJ (if (valid-move? J) J ?j-z)])
+         [newI (if (valid-move? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) I ?i-z)]         ;; does it 2x here
+         [newJ (if (valid-move? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) J ?j-z)])
     ;(printf "seen\n")
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?zombie)
@@ -240,7 +310,7 @@
       (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
       (send dc draw-ellipse newI newJ 10 10))))     
 
-;; walking around within edge-length X edge-length
+;; walking around within EDGE-LENGTH X EDGE-LENGTH
 (define-rule (random-walking zombie-game-rules)
   (?timer <- (time ?t))
   (?actor <- (actor ?label ?i ?j ?ID (?t-a (< ?t-a ?t)) ?str ?sp))
@@ -249,8 +319,8 @@
   (let* ([rand-dir (rand-angle)]
          [I (+ ?i (rand-move-X ?sp rand-dir))]
          [J (+ ?j (rand-move-Y ?sp rand-dir))]
-         [newI (if (valid-move? I) I ?i)]
-         [newJ (if (valid-move? J) J ?j)])
+         [newI (if (valid-move? I J ?i ?j WALL-LST EDGE-LENGTH) I ?i)]             ;; does it 2x here
+         [newJ (if (valid-move? I J ?i ?j WALL-LST EDGE-LENGTH) J ?j)])
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?actor)
     ;; inc actor time to show it's moved
@@ -276,16 +346,25 @@
      (send dc set-brush (make-color 0 0 0 .5) 'solid)
      (send dc draw-ellipse ?i ?j 10 10)))
 
-;; ---------TIME INCREMENT
+;; ---------TIME INCREMENT AND WALL DRAWING
 
 ;; increment timer only when there's nothing left to do...
-;;  meaning all players have moved and interacted
-(define-rule (time-inc zombie-game-rules)
+;;  meaning all PLAYERS have moved and interacted
+(define-rule (time-inc-draw-walls zombie-game-rules)
   (?timer <- (time ?t))
   ==>
   (retract ?timer)
   (assert `(time ,(+ 1 ?t)))
   ;(printf "TIME was: ~a\n\n" ?t)
+  ;; ALSO, draw the walls as rectangles
+  (for ([w WALL-LST])                            ;; uses WALL-LST GLOBAL
+    (let* ((dc (send canvas get-dc))  
+           (width (send canvas get-width))
+           (height (send canvas get-height)))
+       ;; walls' color settings
+       (send dc set-brush (make-color 10 20 0 .75) 'solid)
+       (send dc draw-rectangle (wall-x w) (wall-y w) (wall-w w) (wall-l w))))
+  ;; blit
   (send canvas swap-bitmaps))
 
 ;______________________________________________________________
@@ -314,9 +393,9 @@
    ;; timer keeps track of the turns
    (assert '(time 1))                        
    ;; for an end state to see winner
-   (assert `(player-count ,players))                
-   ;; create the players based on players GLOBAL
-   (for ((i (in-range players)))
+   (assert `(player-count ,PLAYERS))                
+   ;; create the PLAYERS based on PLAYERS GLOBAL
+   (for ((i (in-range PLAYERS)))
      (assert `(start ,i)))
    (start-inference)))
 
