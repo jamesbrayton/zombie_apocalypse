@@ -31,28 +31,34 @@
 ;;------------------------WALL STUFF
 
 ;; not blocked by wall and not of board? then #t, allowing i and j to update
-(define (valid-move? new-i new-j old-i old-j wall-lst edge-len)
-  (andmap (lambda (w) (and (not-thru-wall? new-i new-j old-i old-j w)
-                           (on-board? new-i new-j edge-len))) wall-lst))
+(define (valid-move-LR? new-i new-j old-i old-j wall-lst edge-len)
+  (andmap (lambda (w) (and (not-thru-wall-LR? new-i new-j old-i old-j w)
+                           (on-board? new-i edge-len))) wall-lst))
+
+(define (valid-move-UD? new-i new-j old-i old-j wall-lst edge-len)
+  (andmap (lambda (w) (and (not-thru-wall-UD? new-i new-j old-i old-j w)
+                           (on-board? new-j edge-len))) wall-lst))
 
 ;; on the space defined by EDGE-LENGTH?
-(define (on-board? ni nj el)
-  (if (and (and (and (< ni el)
-                     (>= ni 0))
-                (< nj el))
-           (>= nj 0))
+(define (on-board? n el)
+  (if (and (< n el) (>= n 0))
       #t
       #f))
 
-;; all 4 directions
-(define (not-thru-wall? ni nj oi oj wall)
-  (if (and (and (and (left-okay? ni nj oi oj wall)
-                     (right-okay? ni nj oi oj wall))
-                (up-okay? ni nj oi oj wall))
+;; all 4 directions, split up to allow movement in the direction that
+;;  still works
+(define (not-thru-wall-LR? ni nj oi oj wall)
+  (if (and (left-okay? ni nj oi oj wall)
+           (right-okay? ni nj oi oj wall))
+      #t
+      #f))
+
+(define (not-thru-wall-UD? ni nj oi oj wall)
+  (if (and (up-okay? ni nj oi oj wall)
            (down-okay? ni nj oi oj wall))
       #t
       #f))
-  
+
 ;; the directions, FAIL conditions anded together
 (define (left-okay? ni nj oi oj w)
   (if (and (and (and (<= nj (+ (wall-y w) (wall-l w)))
@@ -296,8 +302,8 @@
   ;; try to move toward person
   (let* ([I (+ ?i-z (point-move-X ?sp-z ?i-z ?j-z ?i-p ?j-p))]
          [J (+ ?j-z (point-move-Y ?sp-z ?i-z ?j-z ?i-p ?j-p))]
-         [newI (if (valid-move? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) I ?i-z)]         ;; does it 2x here
-         [newJ (if (valid-move? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) J ?j-z)])
+         [newI (if (valid-move-LR? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) I ?i-z)]         ;; does it 2x here
+         [newJ (if (valid-move-UD? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) J ?j-z)])
     ;(printf "seen\n")
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?zombie)
@@ -319,8 +325,8 @@
   (let* ([rand-dir (rand-angle)]
          [I (+ ?i (rand-move-X ?sp rand-dir))]
          [J (+ ?j (rand-move-Y ?sp rand-dir))]
-         [newI (if (valid-move? I J ?i ?j WALL-LST EDGE-LENGTH) I ?i)]             ;; does it 2x here
-         [newJ (if (valid-move? I J ?i ?j WALL-LST EDGE-LENGTH) J ?j)])
+         [newI (if (valid-move-LR? I J ?i ?j WALL-LST EDGE-LENGTH) I ?i)]             ;; does it 2x here
+         [newJ (if (valid-move-UD? I J ?i ?j WALL-LST EDGE-LENGTH) J ?j)])
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?actor)
     ;; inc actor time to show it's moved
