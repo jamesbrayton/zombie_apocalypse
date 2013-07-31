@@ -12,12 +12,13 @@
 
 (define EDGE-LENGTH 400)
 (define PLAYERS 50)
+(define WALLS 1)
 
 ;; the x and y MUST be the top left coordinates!
 (struct wall (x y w l))
 
 ;; holds all of the walls to be checked for collisions
-(define WALL-LST `(,(wall 20 40 300 25) ,(wall 300 300 10 500)))
+(define WALL-LST `())
 
 ;;____________________________________________________________________
 
@@ -85,6 +86,9 @@
            (>= nj (wall-y w)))
       #f
       #t))
+
+(define (add-walls! w)
+  (set! WALL-LST (append WALL-LST (list (wall 200 30 30 200)))))
 
 ;;---------------------
 
@@ -209,6 +213,14 @@
   (succeed))
 
 ;; ---------START
+
+;; Randomly Generate the walls
+;; This needs to happen before the actors are constructed
+(define-rule (set-walls zombie-game-rules)
+  (?gen-walls <- (gen-walls ?ID))
+  ==>
+  (retract ?gen-walls)
+  (add-walls! 0))
 
 ;; START state for predicate states-randomly assigns a valid starting point
 ;;  and a normal distribution of the player's strengths and whether they're
@@ -393,7 +405,10 @@
    ;; timer keeps track of the turns
    (assert '(time 1))                        
    ;; for an end state to see winner
-   (assert `(player-count ,PLAYERS))                
+   (assert `(player-count ,PLAYERS))
+   ;; generate random walls
+   (for ((i (in-range WALLS)))
+     (assert `(gen-walls, i)))
    ;; create the PLAYERS based on PLAYERS GLOBAL
    (for ((i (in-range PLAYERS)))
      (assert `(start ,i)))
