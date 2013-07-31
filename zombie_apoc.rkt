@@ -12,7 +12,7 @@
 
 (define EDGE-LENGTH 400)
 (define PLAYERS 50)
-(define WALLS 1)
+(define WALLS 10)
 
 ;; the x and y MUST be the top left coordinates!
 (struct wall (x y w l))
@@ -87,8 +87,16 @@
       #f
       #t))
 
+(define (random-len)
+  (random-integer 75))
+(define (random-wid)
+  (random-integer 100))
+
+(define (random-x-y)
+  (random-integer EDGE-LENGTH))
+  
 (define (add-walls! w)
-  (set! WALL-LST (append WALL-LST (list (wall 200 30 30 200)))))
+  (set! WALL-LST (append WALL-LST (list (wall (random-x-y) (random-x-y) (random-wid) (random-len))))))
 
 ;;---------------------
 
