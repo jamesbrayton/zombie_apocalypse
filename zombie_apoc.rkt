@@ -10,7 +10,7 @@
 
 ;; __________________________GLOBALS AND STRUCTS______________________
 
-(define EDGE-LENGTH 400)
+(define EDGE-LENGTH 600)
 (define PLAYERS 50)
 (define WALLS 10)
 
@@ -185,6 +185,7 @@
 
 ;; gotta use 'order search procedure I think so the priorities can be set
 ; goals
+; random walls
 ; start
 ; battle
 ; walk
@@ -199,7 +200,7 @@
 
 ;; GOAL state time limit
 (define-rule (time-limit zombie-game-rules)
-  (?timer <- (time (?t (>= ?t +inf.0))))                                               ;; set time limit here------
+  (?timer <- (time (?t (>= ?t 10000))))                                               ;; set time limit here------
   ==>
   (printf "TIME LIMIT REACHED: ~a\n" ?t)
   (succeed))
@@ -296,7 +297,7 @@
       (begin
         ;(printf "TIME: ~a:\tzombie ~a zombified person ~a!\n" ?t ?ID-z ?ID-p)
         (retract ?person)
-        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 300) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
+        (assert `(actor zombie ,?i-p ,?j-p ,?ID-p ,(+ ?t 200) ,?str-p ,?sp-p)))))          ;; change death delay time here-------
 
 ;; ---------WALKING
 
@@ -322,7 +323,7 @@
   ;; try to move toward person
   (let* ([I (+ ?i-z (point-move-X ?sp-z ?i-z ?j-z ?i-p ?j-p))]
          [J (+ ?j-z (point-move-Y ?sp-z ?i-z ?j-z ?i-p ?j-p))]
-         [newI (if (valid-move-LR? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) I ?i-z)]         ;; does it 2x here
+         [newI (if (valid-move-LR? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) I ?i-z)]      
          [newJ (if (valid-move-UD? I J ?i-z ?j-z WALL-LST EDGE-LENGTH) J ?j-z)])
     ;(printf "seen\n")
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
@@ -345,7 +346,7 @@
   (let* ([rand-dir (rand-angle)]
          [I (+ ?i (rand-move-X ?sp rand-dir))]
          [J (+ ?j (rand-move-Y ?sp rand-dir))]
-         [newI (if (valid-move-LR? I J ?i ?j WALL-LST EDGE-LENGTH) I ?i)]             ;; does it 2x here
+         [newI (if (valid-move-LR? I J ?i ?j WALL-LST EDGE-LENGTH) I ?i)]       
          [newJ (if (valid-move-UD? I J ?i ?j WALL-LST EDGE-LENGTH) J ?j)])
     ;(printf "TIME ~a:\t~a walks to: ~a, ~a\n" ?t ?ID newI newJ)
     (retract ?actor)
@@ -394,22 +395,8 @@
   (send canvas swap-bitmaps))
 
 ;______________________________________________________________
-
-;; All the GFX
-;;_____________________________________________________________
-(define frame
-  (instantiate frame% ("Zombie Apocalypse")))
-
-(define canvas
-  (instantiate animated-canvas%
-    (frame)
-    (style `(border))
-    (min-width 400)
-    (min-height 600)))
-
-;;______________________________________________________________
   
-;_____________________________RUN IT____________________________
+;_____________________________SIM ______________________________
 
 (define (run-zombie-sim)
   (with-new-inference-environment
@@ -428,8 +415,37 @@
      (assert `(start ,i)))
    (start-inference)))
 
+;;__________________________FRAME_______________________________
+(define frame
+  (instantiate frame% ("Zombie Apocalypse")))
+
+(define canvas
+  (instantiate animated-canvas%
+    (frame)
+    (style `(border))
+    (min-width 600)
+    (min-height 650)))
+
+(define tool-bar (instantiate horizontal-panel% (frame)
+                   (alignment '(right center))))
+
+;; runs the game when pressed
+(define start-button (instantiate button%
+                       ("Start"
+                        tool-bar
+                        (lambda (button event)
+                          (run-zombie-sim)))))
+
+;;______________________________________________________________
+
 ;; randomize source
 (random-source-randomize! (current-random-source))
-;; run it
+;; show frame
 (send frame show #t)
-(run-zombie-sim)
+
+
+
+
+
+
+
