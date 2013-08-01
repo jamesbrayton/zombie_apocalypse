@@ -12,7 +12,7 @@
 
 (define EDGE-LENGTH 600)
 (define PLAYERS 50)
-(define WALLS 10)
+(define WALLS 40)
 
 ;; the x and y MUST be the top left coordinates!
 (struct wall (x y w l))
@@ -30,6 +30,19 @@
 
 
 ;;------------------------WALL STUFF
+
+;; checks to see if actor is randomly placed inside any of the walls
+(define (valid-start? i j wall-lst)
+  (andmap (lambda (w) (not (in-wall? i j w))) wall-lst))
+
+;; actor is placed in a wall?
+(define (in-wall? i j w)
+  (if (and (and (and (>= i (wall-x w))
+                     (<= i (+ (wall-x w) (wall-w w))))
+                (>= j (wall-y w)))
+           (<= j (+ (wall-y w) (wall-l w))))
+      #t
+      #f)) 
 
 ;; not blocked by wall and not of board? then #t, allowing i and j to update
 (define (valid-move-LR? new-i new-j old-i old-j wall-lst edge-len)
@@ -93,14 +106,16 @@
       #f
       #t))
 
+;; randomly generates walls
 (define (random-len)
-  (random-integer 75))
+  (random-integer 100))                                                                                 ;; change wall here------
 (define (random-wid)
-  (random-integer 100))
+  (random-integer 100))                                                                                ;; change wall here------
 
 (define (random-x-y)
   (random-integer EDGE-LENGTH))
   
+;; stuff random walls into GLOBAL WALL-LST
 (define (add-walls! w)
   (set! WALL-LST (append WALL-LST (list (wall (random-x-y) (random-x-y) (random-wid) (random-len))))))
 
@@ -246,23 +261,26 @@
   ==>
   (let ([newI (random-start)]
         [newJ (random-start)])
-    ;(printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
-    (retract ?start)
-    ;; randomly create a zombie or person
-    (if (< 0.5 (random))                                                          ;; change z / p ratio here--------
-        ;; normal-distribution of strength, starts at time -1
-        (begin
-          (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 15)                               ;; change str dist here-----------
-                          ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
-          ;(printf "zombie made\n")
-          )
-        (begin
-          (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
-                          ,(random-gaussian 100 15)                               ;; change str dist here-----------
-                          ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
-          ;(printf "person made\n")
-          ))))
+    ;; checks for valid placement, if not, falls through
+    (when (valid-start? newI newJ WALL-LST)
+        (begin          
+          ;(printf "TIME ~a:\t~a starts at: ~a ~a\n" (- ?t 1) ?ID newI newJ)              
+          (retract ?start)
+          ;; randomly create a zombie or person
+          (if (< 0.5 (random))                                                          ;; change z / p ratio here--------
+              ;; normal-distribution of strength, starts at time -1
+              (begin
+                (assert `(actor zombie ,newI ,newJ ,?ID ,(- ?t 1) 
+                                ,(random-gaussian 100 15)                               ;; change str dist here-----------
+                                ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
+                ;(printf "zombie made\n")
+                )
+              (begin
+                (assert `(actor person ,newI ,newJ ,?ID ,(- ?t 1) 
+                                ,(random-gaussian 100 15)                               ;; change str dist here-----------
+                                ,(random-gaussian 2 0.3)))                              ;; change sp dist here------------
+                ;(printf "person made\n")
+                ))))))
 
 ;; ---------BATTLE    
     
@@ -313,7 +331,7 @@
                person
                ?i-p
                ;; distance function
-               (?j-p (> 110 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
+               (?j-p (> 60 (sqrt (+ (expt (- ?i-z ?i-p) 2)                                   ;; change sight distance here------
                      (expt (- ?j-z ?j-p) 2)))))
                ?ID-p
                ?T 
@@ -335,7 +353,7 @@
            (width (send canvas get-width))
            (height (send canvas get-height)))
       (send dc set-brush (brush-color 'zombie ?str-z) 'solid)        
-      (send dc draw-ellipse newI newJ 10 10))))     
+      (send dc draw-ellipse (- newI 5) (- newJ 5) 10 10))))     
 
 ;; walking around within EDGE-LENGTH X EDGE-LENGTH
 (define-rule (random-walking zombie-game-rules)
@@ -357,7 +375,7 @@
            (width (send canvas get-width))
            (height (send canvas get-height)))
       (send dc set-brush (brush-color ?label ?str) 'solid)        
-      (send dc draw-ellipse newI newJ 10 10))))
+      (send dc draw-ellipse (- newI 5) (- newJ 5) 10 10))))
 
 ;; ---------DRAW RULE
 
@@ -371,7 +389,7 @@
           (height (send canvas get-height)))
      ;; dead are grey
      (send dc set-brush (make-color 0 0 0 .5) 'solid)
-     (send dc draw-ellipse ?i ?j 10 10)))
+     (send dc draw-ellipse (- ?i 5) (- ?j 5) 10 10)))
 
 ;; ---------TIME INCREMENT AND WALL DRAWING
 
@@ -396,7 +414,7 @@
 
 ;______________________________________________________________
   
-;_____________________________SIM ______________________________
+;_____________________________SIM _____________________________
 
 (define (run-zombie-sim)
   (with-new-inference-environment
